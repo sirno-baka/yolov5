@@ -94,6 +94,7 @@ type yoloNet struct {
 	net       ml.NeuralNet
 	cocoNames []string
 
+	Rows                int
 	DefaultInputWidth   int
 	DefaultInputHeight  int
 	confidenceThreshold float32
@@ -203,8 +204,13 @@ func (y *yoloNet) processOutputs(frame gocv.Mat, outputs []gocv.Mat, filter map[
 	if err != nil {
 		return nil, err
 	}
+	var rows int
+	if y.Rows != 0 {
+		rows = y.Rows
+	} else {
+		rows = 25200
+	}
 
-	rows := 25200
 	stepSize := 85
 
 	for i := 0; i < rows; i++ {
