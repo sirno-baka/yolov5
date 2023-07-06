@@ -23,6 +23,8 @@ import (
 
 // Default constants for initialising the yolov5 net.
 const (
+	DefaultRows = 25200
+
 	DefaultInputWidth  = 640
 	DefaultInputHeight = 640
 
@@ -32,6 +34,7 @@ const (
 
 // Config can be used to customise the settings of the neural network used for object detection.
 type Config struct {
+	Rows int
 	// InputWidth & InputHeight are used to determine the input size of the image for the network
 	InputWidth  int
 	InputHeight int
@@ -64,6 +67,7 @@ func (c *Config) validate() {
 // DefaultConfig used to create a working yolov5 net out of the box.
 func DefaultConfig() Config {
 	return Config{
+		Rows:                DefaultRows,
 		InputWidth:          DefaultInputWidth,
 		InputHeight:         DefaultInputHeight,
 		ConfidenceThreshold: DefaultConfThreshold,
@@ -128,6 +132,7 @@ func NewNetWithConfig(modelPath, cocoNamePath string, config Config) (Net, error
 
 	return &yoloNet{
 		net:                 net,
+		Rows:                config.Rows,
 		cocoNames:           cocoNames,
 		DefaultInputWidth:   config.InputWidth,
 		DefaultInputHeight:  config.InputHeight,
