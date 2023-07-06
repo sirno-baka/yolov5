@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gocv.io/x/gocv"
 
-	"github.com/wimspaargaren/yolov5/internal/ml"
-	"github.com/wimspaargaren/yolov5/internal/ml/mocks"
+	"github.com/sirno-baka/yolov5/internal/ml"
+	"github.com/sirno-baka/yolov5/internal/ml/mocks"
 )
 
 type YoloTestSuite struct {

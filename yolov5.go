@@ -18,7 +18,7 @@ import (
 
 	"gocv.io/x/gocv"
 
-	"github.com/wimspaargaren/yolov5/internal/ml"
+	"github.com/sirno-baka/yolov5/internal/ml"
 )
 
 // Default constants for initialising the yolov5 net.
