@@ -23,7 +23,8 @@ import (
 
 // Default constants for initialising the yolov5 net.
 const (
-	DefaultRows = 25200
+	DefaultRows     = 25200
+	DefaultStepSize = 85
 
 	DefaultInputWidth  = 640
 	DefaultInputHeight = 640
@@ -34,7 +35,8 @@ const (
 
 // Config can be used to customise the settings of the neural network used for object detection.
 type Config struct {
-	Rows int
+	Rows     int
+	StepSize int
 	// InputWidth & InputHeight are used to determine the input size of the image for the network
 	InputWidth  int
 	InputHeight int
@@ -68,6 +70,7 @@ func (c *Config) validate() {
 func DefaultConfig() Config {
 	return Config{
 		Rows:                DefaultRows,
+		StepSize:            DefaultStepSize,
 		InputWidth:          DefaultInputWidth,
 		InputHeight:         DefaultInputHeight,
 		ConfidenceThreshold: DefaultConfThreshold,
@@ -99,6 +102,7 @@ type yoloNet struct {
 	cocoNames []string
 
 	Rows                int
+	StepSize            int
 	DefaultInputWidth   int
 	DefaultInputHeight  int
 	confidenceThreshold float32
@@ -133,6 +137,7 @@ func NewNetWithConfig(modelPath, cocoNamePath string, config Config) (Net, error
 	return &yoloNet{
 		net:                 net,
 		Rows:                config.Rows,
+		StepSize:            config.StepSize,
 		cocoNames:           cocoNames,
 		DefaultInputWidth:   config.InputWidth,
 		DefaultInputHeight:  config.InputHeight,
@@ -209,14 +214,8 @@ func (y *yoloNet) processOutputs(frame gocv.Mat, outputs []gocv.Mat, filter map[
 	if err != nil {
 		return nil, err
 	}
-	var rows int
-	if y.Rows != 0 {
-		rows = y.Rows
-	} else {
-		rows = 25200
-	}
-
-	stepSize := 85
+	rows := y.Rows
+	stepSize := y.StepSize
 
 	for i := 0; i < rows; i++ {
 		confidence := data[4+stepSize*i]
