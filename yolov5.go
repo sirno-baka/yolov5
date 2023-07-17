@@ -219,7 +219,7 @@ func (y *yoloNet) processOutputs(frame gocv.Mat, outputs []gocv.Mat, filter map[
 
 	for i := 0; i < rows; i++ {
 		confidence := data[4+stepSize*i]
-		if confidence >= .4 {
+		if confidence >= y.confidenceThreshold {
 			startIndex := 5 + stepSize*i
 			endIndex := stepSize * (i + 1)
 
