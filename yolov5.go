@@ -23,11 +23,11 @@ import (
 
 // Default constants for initialising the yolov5 net.
 const (
-	DefaultRows     = 25200
-	DefaultStepSize = 85
-
-	DefaultInputWidth  = 640
-	DefaultInputHeight = 640
+	DefaultRows        = 25200
+	DefaultStepSize    = 85
+	DefaultYoloVersion = 5
+	DefaultInputWidth  = 1280
+	DefaultInputHeight = 1280
 
 	DefaultConfThreshold float32 = 0.5
 	DefaultNMSThreshold  float32 = 0.4
@@ -40,6 +40,7 @@ type Config struct {
 	// InputWidth & InputHeight are used to determine the input size of the image for the network
 	InputWidth  int
 	InputHeight int
+	YoloVersion int
 	// ConfidenceThreshold can be used to determine the minimum confidence before an object is considered to be "detected"
 	ConfidenceThreshold float32
 	// Non-maximum suppression threshold used for removing overlapping bounding boxes
@@ -63,6 +64,9 @@ func (c *Config) validate() {
 	}
 	if c.InputHeight == 0 {
 		c.InputHeight = DefaultInputHeight
+	}
+	if c.YoloVersion == 0 {
+		c.YoloVersion = DefaultYoloVersion
 	}
 }
 
@@ -103,6 +107,7 @@ type yoloNet struct {
 
 	Rows                int
 	StepSize            int
+	YoloVersion         int
 	DefaultInputWidth   int
 	DefaultInputHeight  int
 	confidenceThreshold float32
@@ -139,6 +144,7 @@ func NewNetWithConfig(modelPath, cocoNamePath string, config Config) (Net, error
 		Rows:                config.Rows,
 		StepSize:            config.StepSize,
 		cocoNames:           cocoNames,
+		YoloVersion:         config.YoloVersion,
 		DefaultInputWidth:   config.InputWidth,
 		DefaultInputHeight:  config.InputHeight,
 		confidenceThreshold: config.ConfidenceThreshold,
@@ -210,31 +216,63 @@ func (y *yoloNet) processOutputs(frame gocv.Mat, outputs []gocv.Mat, filter map[
 	detections := []ObjectDetection{}
 	bboxes := []image.Rectangle{}
 	confidences := []float32{}
+
+	rows := outputs[0].Size()[1]
+	dimensions := outputs[0].Size()[2]
+	yolov8 := y.YoloVersion == 8
+	// yolov5 has an output of shape (batchSize, 25200, 85) (Num classes + box[x,y,w,h] + confidence[c])
+	// yolov8 has an output of shape (batchSize, 84,  8400) (Num classes + box[x,y,w,h])
+	if dimensions > rows {
+		rows = outputs[0].Size()[2]
+		dimensions = outputs[0].Size()[1]
+		outputs[0] = outputs[0].Reshape(1, dimensions)
+		gocv.Transpose(outputs[0], &outputs[0])
+		yolov8 = true
+	}
+
 	data, err := outputs[0].DataPtrFloat32()
 	if err != nil {
 		return nil, err
 	}
-	rows := y.Rows
-	stepSize := y.StepSize
 
 	for i := 0; i < rows; i++ {
-		confidence := data[4+stepSize*i]
-		if confidence >= y.confidenceThreshold {
-			startIndex := 5 + stepSize*i
-			endIndex := stepSize * (i + 1)
 
+		if yolov8 {
+			startIndex := 4 + dimensions*i
+			endIndex := dimensions * (i + 1)
 			scores := data[startIndex:endIndex]
+			classID, confidence := getClassID(scores)
 
-			classID := getClassID(scores)
-			confidences = append(confidences, confidence)
-			boundingBox := calculateBoundingBox(frame, data[0+stepSize*i:4+stepSize*i])
-			bboxes = append(bboxes, boundingBox)
-			detections = append(detections, ObjectDetection{
-				ClassID:     classID,
-				ClassName:   y.cocoNames[classID],
-				BoundingBox: boundingBox,
-				Confidence:  confidence,
-			})
+			// Print the results
+			if confidence > y.confidenceThreshold {
+				//fmt.Printf("Max class score: %f, Class ID: %d\n", maxClassScore, classID)
+				confidences = append(confidences, confidence)
+				boundingBox := y.calculateBoundingBox(frame, data[0+dimensions*i:4+dimensions*i])
+				bboxes = append(bboxes, boundingBox)
+				detections = append(detections, ObjectDetection{
+					ClassID:     classID,
+					ClassName:   y.cocoNames[classID],
+					BoundingBox: boundingBox,
+					Confidence:  confidence,
+				})
+			}
+		} else {
+			confidence := data[4+dimensions*i]
+			if confidence >= y.confidenceThreshold {
+				startIndex := 5 + dimensions*i
+				endIndex := dimensions * (i + 1)
+				scores := data[startIndex:endIndex]
+				classID, _ := getClassID(scores)
+				confidences = append(confidences, confidence)
+				boundingBox := y.calculateBoundingBox(frame, data[0+dimensions*i:4+dimensions*i])
+				bboxes = append(bboxes, boundingBox)
+				detections = append(detections, ObjectDetection{
+					ClassID:     classID,
+					ClassName:   y.cocoNames[classID],
+					BoundingBox: boundingBox,
+					Confidence:  confidence,
+				})
+			}
 		}
 	}
 
@@ -264,23 +302,24 @@ func (y *yoloNet) isFiltered(classID int, classIDs map[string]bool) bool {
 }
 
 // calculateBoundingBox calculate the bounding box of the detected object.
-func calculateBoundingBox(frame gocv.Mat, row []float32) image.Rectangle {
+func (y *yoloNet) calculateBoundingBox(frame gocv.Mat, row []float32) image.Rectangle {
 	if len(row) < 4 {
 		return image.Rect(0, 0, 0, 0)
 	}
-	xFactor := float32(frame.Cols()) / float32(640)
-	yFactor := float32(frame.Rows()) / float32(640)
 
-	x, y, w, h := row[0], row[1], row[2], row[3]
+	xFactor := float32(frame.Cols()) / float32(y.DefaultInputWidth)
+	yFactor := float32(frame.Rows()) / float32(y.DefaultInputHeight)
+
+	x, y1, w, h := row[0], row[1], row[2], row[3]
 	left := int((x - 0.5*w) * xFactor)
-	top := int((y - 0.5*h) * yFactor)
+	top := int((y1 - 0.5*h) * yFactor)
 	width := int(w * xFactor)
 	height := int(h * yFactor)
 
 	return image.Rect(left, top, left+width, top+height)
 }
 
-func getClassID(x []float32) int {
+func getClassID(x []float32) (int, float32) {
 	res := 0
 	max := float32(0)
 	for i, y := range x {
@@ -289,7 +328,7 @@ func getClassID(x []float32) int {
 			max = y
 		}
 	}
-	return res
+	return res, max
 }
 
 // getCocoNames read coconames from given path.
